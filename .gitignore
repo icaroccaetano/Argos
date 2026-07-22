@@ -1,0 +1,49 @@
+# Ambiente — NUNCA versionar segredos
+.env
+.env.*
+!.env.example
+
+# Dados sensíveis — currículos de candidatos (PII).
+# Default seguro: nenhum PDF entra no repositório. Abra exceção conscientemente.
+uploads/
+storage/
+data/
+*.pdf
+!docs/**/*.pdf
+
+# Override local do Compose (volume mount, --reload)
+docker-compose.override.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+build/
+dist/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Ferramentas
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.log
+
+# Airflow
+airflow/logs/
+airflow/airflow.db
+airflow/airflow.cfg
+
+# IDE / SO
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

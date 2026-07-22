@@ -1,0 +1,10 @@
+.git
+.env
+.env.example
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+# venv do host: binários Windows, inúteis e quebrados dentro da imagem Linux
+.venv

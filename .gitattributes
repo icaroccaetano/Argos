@@ -1,0 +1,11 @@
+# O repositório é consumido por uma imagem Linux: LF é o fim de linha canônico.
+# Sem isso, o autocrlf do Windows gera diff fantasma e quebra scripts no container.
+* text=auto eol=lf
+
+# Binários: nunca normalizar.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.gz binary
+*.zip binary
