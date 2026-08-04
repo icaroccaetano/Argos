@@ -1,6 +1,6 @@
 # Spec 03: Modelo de Dados — Currículos e Avaliações
 
-**Status:** Aprovada
+**Status:** Implementada
 **Depende de:** spec 01, spec 02
 
 ## 1. Contexto
@@ -41,7 +41,7 @@ CREATE TYPE evaluation_status AS ENUM ('pending','processing','done','error');
 CREATE TABLE curricula (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     filename    VARCHAR(255) NOT NULL,
-    s3_key      VARCHAR(512) NOT NULL UNIQUE,
+    bucket_key      VARCHAR(512) NOT NULL UNIQUE,
     status      curriculum_status NOT NULL DEFAULT 'pending',
     error_msg   TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -77,7 +77,7 @@ Módulo `api/models/curriculum.py`, classe `Curriculum`, tabela `curricula`:
 |---|---|---|
 | `id` | `Mapped[uuid.UUID]` | PK; ver RT-03-05 |
 | `filename` | `Mapped[str]` | nome original do arquivo enviado |
-| `s3_key` | `Mapped[str]` | chave do objeto no bucket; único (RN-03-09) |
+| `bucket_key` | `Mapped[str]` | chave do objeto no bucket; único (RN-03-09) |
 | `status` | `Mapped[CurriculumStatus]` | ENUM nativo (RT-03-04) |
 | `error_msg` | `Mapped[str \| None]` | preenchido só em `error` (RN-03-03) |
 | `created_at` | `Mapped[datetime]` | `TIMESTAMPTZ`, default do banco |
@@ -154,7 +154,7 @@ com `selectinload()`.
   um currículo que possua avaliações é bloqueado pelo banco (`ON DELETE
   RESTRICT`) — o histórico de avaliação não pode ser perdido por remoção em
   cascata.
-- **RN-03-09** — `s3_key` é único: dois currículos nunca apontam para o mesmo
+- **RN-03-09** — `bucket_key` é único: dois currículos nunca apontam para o mesmo
   objeto do bucket. A unicidade vale inclusive para registros com `deleted_at`
   preenchido — reenviar um arquivo removido logicamente exige uma nova chave.
 - **RN-03-10** — Um mesmo currículo pode ter várias avaliações, inclusive contra
@@ -193,7 +193,7 @@ com `selectinload()`.
   (`TimestampMixin`, `SoftDeleteMixin`) em `api/models/mixins.py`, não são
   duplicadas por classe.
 - **RT-03-09** — Nomes de constraint são explícitos e estáveis
-  (`ck_evaluations_score_range`, `uq_curricula_s3_key`,
+  (`ck_evaluations_score_range`, `uq_curricula_bucket_key`,
   `fk_evaluations_curriculum_id_curricula`). Constraints com nome gerado pelo
   banco são impossíveis de alterar em migrations futuras de forma portável.
 
@@ -231,7 +231,7 @@ Executados dentro do container `api`, conforme spec 01 §3.5.
   levanta `IntegrityError` pela constraint `ck_evaluations_score_range`
   (RN-03-06).
 - **CA-03-10** — Teste automatizado: `INSERT` de dois `curricula` com o mesmo
-  `s3_key` levanta `IntegrityError` (RN-03-09).
+  `bucket_key` levanta `IntegrityError` (RN-03-09).
 - **CA-03-11** — Teste automatizado: dois `evaluations` do mesmo
   `curriculum_id` com o mesmo `job_description` são gravados sem erro
   (RN-03-10).
@@ -256,24 +256,13 @@ revisão v2.0; o número não é reciclado (template §2.1).
 
 ## 8. Pendências
 
-Divergências entre esta spec e o estado do repositório, verificadas em
-2026-07-22: **a spec está inteiramente por implementar.** Nada do que ela
-descreve existe no código.
-
-| # | Item | Situação |
-|---|---|---|
-| 1 | `api/models/enums.py` — `CurriculumStatus`, `EvaluationStatus` | não existe |
-| 2 | `api/models/mixins.py` — `TimestampMixin`, `SoftDeleteMixin` | não existe |
-| 3 | `api/models/curriculum.py` — `Curriculum` | não existe |
-| 4 | `api/models/evaluation.py` — `Evaluation` | não existe |
-| 5 | `api/models/__init__.py` — importação dos modelos (RT-03-06) | arquivo vazio |
-| 6 | `migrations/versions/0002_create_curricula_and_evaluations.py` | não existe; `head` é `0001_enable_pgvector` |
-| 7 | `tests/test_models.py` — CA-03-06 a CA-03-11 | não existe |
-| 8 | `CA-03-01` … `CA-03-12` | nenhum executado |
+Nenhuma. Todos os `CA-03-01` … `CA-03-12` foram executados e aprovados em
+2026-08-04, dentro do container `api`.
 
 ## 9. Histórico de Revisões
 
 | Data | Versão | Alteração |
 |---|---|---|
+| 2026-08-04 | 1.1 | Implementação. Criados `api/models/enums.py`, `mixins.py`, `curriculum.py`, `evaluation.py`, o `__init__.py` do pacote e a migration `0002_create_curricula_and_evaluations.py`; testes em `tests/test_models.py`, sobre uma fixture de sessão assíncrona nova em `tests/conftest.py`. Todos os `CA-03-*` executados e aprovados; §8 zerada e Status para `Implementada`. Dois fatos descobertos na execução: (a) o id da revisão é `0002_curricula_evaluations`, mais curto que o nome do arquivo, porque `alembic_version.version_num` é `VARCHAR(32)` e o nome completo tem 38 caracteres; (b) CA-03-06 foi verificado pelo ramo `InvalidTextRepresentation` do critério — SQLSTATE `22P02` — porque o asyncpg não traduz esse erro para `DataError`. |
 | 2026-07-22 | 1.0 | Criação. Escopo restrito a `curricula` e `evaluations` por decisão do usuário; embeddings adiados para a v2.0. Decisões firmadas: ENUM nativo do PostgreSQL, `model_version` NOT NULL desde a criação, `deleted_at` nas duas tabelas e FK `ON DELETE RESTRICT`. |
   
