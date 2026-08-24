@@ -41,7 +41,7 @@ esqueleto previsível, onde cada tipo de código tem um endereço único e óbvi
 | Configuração | `pydantic-settings` | única fonte de env vars |
 | Containerização | Docker + Docker Compose | — |
 | Testes | `pytest` + `pytest-asyncio` | — |
-| Lint / format | `ruff` | — |
+| Lint / format | `ruff` | Regras declaradas em `ruff.toml` na raiz |
 
 O uso de `pgvector` é decisão firmada nesta spec: o armazenamento e a busca de
 embeddings acontecem no próprio PostgreSQL, sem banco vetorial dedicado. O schema
@@ -70,7 +70,7 @@ ARGOS/
 │   ├── argos.md            # Visão de domínio do produto.
 │   └── specs/              # Especificações (SDD).
 ├── migrations/             # Migrações geradas e gerenciadas pelo Alembic.
-├── tests/                  # Testes unitários e de integração.
+├── tests/                  # Testes. Topologia interna definida na spec 07.
 ├── workers/                # Processamento em background.
 ├── .env                    # Variáveis de ambiente locais (não versionado).
 ├── .env.example            # Template seguro de variáveis de ambiente.
@@ -79,6 +79,7 @@ ARGOS/
 ├── docker-compose.yml      # Serviços: api, db (pgvector), redis.
 ├── Dockerfile              # Imagem da aplicação FastAPI.
 ├── requirements.txt        # Dependências Python.
+├── ruff.toml               # Regras de lint — `select` explícito.
 ├── Makefile                # Automação (dev, test, lint, migrate).
 └── CLAUDE.md               # Instruções de sistema do agente.
 ```
@@ -113,6 +114,7 @@ valor vazio ou exemplo não sensível.
 | `POSTGRES_DB` | sim | idem |
 | `POSTGRES_HOST` | sim | `db` no Compose |
 | `POSTGRES_PORT` | sim | opcional; default `5432` |
+| `POSTGRES_TEST_DB` | sim | opcional; default `argos_test`. Banco dedicado da suíte de integração; adicionada pela spec 07 §3.4 |
 | `REDIS_URL` | sim | — |
 
 **Sem duplicação de URL.** As URLs de conexão **não** são variáveis de ambiente: são
@@ -229,10 +231,28 @@ Decisões deliberadamente adiadas para specs futuras:
 
 ## 8. Pendências
 
-Divergências conhecidas entre esta spec e o estado atual do repositório, verificadas
-em 2026-07-22:
+Nenhuma. Todos os `CA-01-*` foram executados e passam.
 
-Nenhuma. Todos os `CA-01-*` foram executados e aprovados em 2026-07-22.
+A pendência de lint — CA-01-07 acusando 33 erros no container — foi fechada pela
+criação do `ruff.toml` na raiz. O arquivo declara o `select` explicitamente, o que
+desacopla o conjunto de regras da versão de `ruff` que cada ambiente resolve sob o
+range de RT-01-08 — a causa real da falha, e não o `EXE002` em si. Fixar a versão
+foi descartado por violar RT-01-08 e CA-01-11. O fechamento exigiu 8 edições de
+código: 7 `W292` (newline final ausente) e um `# noqa: S105` sobre
+`FORBIDDEN_PRODUCTION_SECRET`, que é sentinela e não segredo. Um achado
+remanescente, `UP042`, contradizia o contrato da §3.3 da spec 03 e foi resolvido
+pela revisão daquela spec (v1.3), não por configuração de lint. CA-01-07 foi
+reexecutado no container em 2026-08-24 — `All checks passed!` —, com host
+(`ruff` 0.15.22) e container (0.16.4) convergindo no mesmo resultado.
+
+A pendência anterior — `POSTGRES_TEST_DB` ausente de `api/core/config.py` e de
+`.env.example` — foi fechada pela implementação da spec 07. CA-01-10 foi reexecutado em
+2026-08-24 e passa, agora sem vacuidade: as nove variáveis do `Settings`, incluindo
+`POSTGRES_TEST_DB`, constam do `.env.example`. Ele roda **no host**, não no container:
+`.env.example` está no `.dockerignore` e não existe na imagem.
+
+CA-01-06 e CA-01-08 foram reexecutados na mesma data e passam. Os demais `CA-01-*` foram
+executados e aprovados em 2026-07-22.
 
 Os routers `curricula` e `evaluations` são stubs sem rotas, e `/openapi.json` expõe
 apenas `/health`. Isso **não** é pendência: §3.3 exige que rotas de negócio sejam
@@ -243,6 +263,11 @@ endpoint são escopo da spec `05-api_contracts` por §7.
 
 | Data | Versão | Alteração |
 |---|---|---|
+| 2026-08-24 | 2.13 | Emenda à §2 solicitada pelo usuário: a tabela de stack passa a registrar que as regras de `ruff` são declaradas em `ruff.toml` na raiz. Fecha a pendência 1; §8 zerada. Status permanece `Implementada`. |
+| 2026-08-24 | 2.12 | Emenda à §3.2 solicitada pelo usuário: `ruff.toml` incorporado à árvore de diretórios, entre `requirements.txt` e `Makefile`. Registra na topologia o arquivo criado na v2.11. Pendência 1 reduzida à §2, que segue registrando `ruff` sem menção ao arquivo de configuração. |
+| 2026-08-24 | 2.11 | Escrituração. Pendência 1 fechada: `ruff.toml` criado na raiz, declarando `target-version`, `select`, `extend-immutable-calls` para o `Depends()` do FastAPI e `per-file-ignores` para `tests/**`. CA-01-07 reexecutado no container — `All checks passed!` — e CA-01-08 em `14 passed`. Nova pendência 1: §2 e §3.2 não citam o `ruff.toml` e são normativas. Nenhuma seção normativa alterada. |
+| 2026-08-24 | 2.10 | Escrituração após a implementação da spec 07. Pendência 1 fechada: `POSTGRES_TEST_DB` existe em `api/core/config.py` e em `.env.example`, com CA-01-10 reexecutado. Nova pendência 1: CA-01-07 falha por causa externa a esta spec — regras que entraram no conjunto padrão do `ruff` 0.16.4. Nenhuma seção normativa alterada. |
+| 2026-08-04 | 2.9 | Emenda solicitada pelo usuário em consequência da spec 07: §3.2 delega a topologia interna de `tests/` à spec 07; §3.4 recebe `POSTGRES_TEST_DB`. Status permanece `Implementada` — todos os `CA-01-*` seguem passando —, com a divergência registrada na §8. |
 | 2026-07-22 | 2.8 | Pendência 3 removida: não era divergência com o repositório. §3.3 exige o prefixo `/v1` montado, não a existência de rotas; os contratos de endpoint são escopo da spec `05` por §7. Suíte completa de `CA-01-*` reexecutada e aprovada; Status passa a `Implementada`. |
 | 2026-07-22 | 2.7 | CA-01-06 alterado a pedido do usuário: `--exclude-dir=.venv`, com a justificativa da exclusão anexada ao critério. Reexecutado e aprovado. |
 | 2026-07-22 | 2.6 | Pendência 2 fechada: GNU Make 4.4.1 instalado no host (`winget install ezwinports.make`) e CA-01-09 executado — `make dev`, `make test`, `make lint` e `make migrate` rodam os comandos correspondentes. |

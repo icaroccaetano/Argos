@@ -1,0 +1,53 @@
+# Configuração de lint do Argos — spec 01 §2 (stack) e CA-01-07.
+#
+# Por que este arquivo existe: sem `select` declarado, o conjunto de regras
+# aplicado é o default da versão de `ruff` instalada. Como RT-01-08 exige range
+# (`ruff>=0.6,<1.0`) e não versão fixa, host e container resolvem versões
+# diferentes e passam a lintar o mesmo código sob regras diferentes. Foi o que
+# quebrou CA-01-07 em 2026-08-24: o default do 0.16.4 trouxe `EXE002`, que
+# acusa todo `.py` do repositório porque o NTFS não tem bit de execução e o
+# `COPY . .` do Dockerfile grava modo 755 na imagem Linux.
+#
+# Declarar o `select` tira o lint da mão do default. Mesma lógica de RT-01-01
+# para variáveis de ambiente: nada implícito, tudo centralizado.
+
+target-version = "py312"
+line-length = 88
+
+# Aditivo: preserva os excludes default do ruff (`.git`, `__pycache__`,
+# `.ruff_cache`, `build`, ...). `exclude` os substituiria.
+extend-exclude = [".venv"]
+
+[lint]
+select = [
+    "E",      # pycodestyle — errors
+    "W",      # pycodestyle — warnings
+    "F",      # pyflakes
+    "I",      # isort — ordenação de imports
+    "B",      # flake8-bugbear — armadilhas de runtime
+    "UP",     # pyupgrade — sintaxe moderna
+    "ANN",    # flake8-annotations — sustenta RT-01-06
+    "ASYNC",  # flake8-async — bloqueio de event loop
+    "S",      # flake8-bandit — segurança
+    "T20",    # flake8-print — `print` não é log
+]
+
+[lint.flake8-bugbear]
+# `Depends()` em argumento default é o idioma de injeção do FastAPI, avaliado
+# uma vez na definição da rota de propósito — não é o bug mutável que B008
+# descreve.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Form",
+    "fastapi.File",
+]
+
+[lint.per-file-ignores]
+# `assert` é o instrumento do pytest (S101). Credenciais em teste são fixtures
+# sintéticas, não segredos (S105/S106). `*args: Any` em helpers e factories é
+# repasse opaco, não tipagem preguiçosa (ANN401).
+"tests/**" = ["S101", "S105", "S106", "ANN401"]

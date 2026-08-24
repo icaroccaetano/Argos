@@ -32,8 +32,14 @@ disciplina de configuração aqui é um requisito de segurança, não de estilo.
 - **RF-02-05** — `api/core/database.py` expõe o `engine` assíncrono, a fábrica
   `async_session_factory` e a dependência `get_db()`, que entrega uma `AsyncSession` por
   requisição e a encerra ao final, inclusive quando a requisição levanta exceção.
-- **RF-02-06** — `migrations/env.py` obtém sua URL de conexão de
-  `settings.database_url_sync` e define `target_metadata = Base.metadata`.
+- **RF-02-06** — `migrations/env.py` define `target_metadata = Base.metadata` e obtém
+  sua URL de conexão de `settings.database_url_sync`, **salvo quando uma URL já vier
+  configurada no `Config` do Alembic** — nesse caso ela prevalece. O `alembic.ini` traz
+  `sqlalchemy.url` vazia, então o caminho de linha de comando continua derivando do
+  `Settings`, sem alteração de comportamento. A precedência existe para quem invoca o
+  Alembic programaticamente contra outro alvo, como a suíte de integração da spec 07
+  (RT-07-07): um `env.py` que ignora o próprio `Config` não pode ser reaproveitado, e
+  a migration acaba rodando no banco errado sem nenhum sinal.
 - **RF-02-07** — Os comandos do projeto podem ser executados no host, fora da rede do
   Compose, sobrescrevendo `POSTGRES_HOST` no ambiente do processo — sem editar `.env`
   e sem nenhum arquivo de configuração adicional.
@@ -53,7 +59,13 @@ Estende a tabela da spec 01 §3.4. Toda variável aparece em `.env.example` (CA-
 | `POSTGRES_DB` | `str` | sim | — |
 | `POSTGRES_HOST` | `str` | sim | — |
 | `POSTGRES_PORT` | `int` | não | `5432` |
+| `POSTGRES_TEST_DB` | `str` | não | `argos_test` |
 | `REDIS_URL` | `str` | sim | — |
+
+`POSTGRES_TEST_DB` e as URLs `database_url_test_*` derivadas dela **não** são desta
+spec: pertencem à spec 07 §3.4, que define o banco dedicado da suíte de integração.
+Aparecem aqui porque o `Settings` é a única fonte de variáveis de ambiente (RT-01-01)
+e este é o contrato do `Settings`. Alterações nesses campos se resolvem na spec 07.
 
 `POSTGRES_PORT` é a única adição desta spec ao conjunto autoritativo da spec 01 §3.4.
 Ela existe para eliminar o `5432` literal da derivação das URLs; tem default porque a
@@ -87,6 +99,7 @@ class Settings(BaseSettings):
     POSTGRES_DB: str
     POSTGRES_HOST: str
     POSTGRES_PORT: int = 5432
+    POSTGRES_TEST_DB: str = "argos_test"       # spec 07 §3.4
     REDIS_URL: str
 
     @property
@@ -94,6 +107,12 @@ class Settings(BaseSettings):
 
     @property
     def database_url_sync(self) -> str: ...    # postgresql+psycopg2://...
+
+    @property
+    def database_url_test_async(self) -> str: ...   # spec 07 §3.4
+
+    @property
+    def database_url_test_sync(self) -> str: ...    # spec 07 §3.4
 
 
 settings: Settings = Settings()
@@ -212,12 +231,26 @@ Executados conforme spec 01 §3.5, dentro do container `api`, salvo indicação 
 
 ## 8. Pendências
 
-Nenhuma. Todos os `CA-02-*` foram executados e aprovados em 2026-07-22.
+| # | Divergência |
+|---|---|
+| 1 | CA-02-14 falha pela metade: `pytest` passa (`14 passed`), mas `ruff check .` acusa 33 erros no container, nenhum originado em código desta implementação. 31 são `EXE002` (arquivo executável sem shebang) e atingem todo `.py` do repositório — `api/main.py`, `airflow/` e `workers/` inclusive: o Git Bash do Windows grava modo `755` na árvore de trabalho e o `COPY . .` do `Dockerfile` leva o modo para a imagem, embora o índice do git registre `100644`. Os 2 restantes são `B008` sobre `Depends(get_db)` em `tests/integration/test_database.py`. Ambas as regras entraram no conjunto padrão do `ruff` 0.16.4, que a reconstrução da imagem instalou sob o range `ruff>=0.6,<1.0` do `requirements.txt`. Fechar exige decisão de dependência (fixar a versão) ou arquivo de configuração de lint na raiz — nenhuma das duas cabe em escrituração. |
+
+As pendências 1 e 2 da revisão anterior foram fechadas pela implementação da spec 07:
+`POSTGRES_TEST_DB`, `database_url_test_async` e `database_url_test_sync` existem em
+`api/core/config.py`, e `migrations/env.py` passou a respeitar a URL já presente no
+`Config` do Alembic. A precedência foi exercitada de fato — a suíte de integração migra
+`argos_test`, não `argos` (spec 07 CA-07-11) —, e o caminho de linha de comando segue
+intacto: CA-02-08, CA-02-09 e CA-02-13 reexecutados em 2026-08-24 e aprovados.
+
+Os demais `CA-02-*` foram executados e aprovados em 2026-07-22.
 
 ## 9. Histórico de Revisões
 
 | Data | Versão | Alteração |
 |---|---|---|
+| 2026-08-24 | 1.9 | Escrituração após a implementação da spec 07. Pendências 1 e 2 fechadas: o `Settings` ganhou `POSTGRES_TEST_DB` e as duas URLs de teste, e `migrations/env.py` implementa a precedência que RF-02-06 exige desde a v1.8, com CA-02-08, CA-02-09 e CA-02-13 reexecutados. Nova pendência 1: a metade de `ruff` de CA-02-14 falha por causa externa a esta spec. Nenhuma seção normativa alterada. |
+| 2026-08-17 | 1.8 | Emenda a RF-02-06 aprovada pelo usuário, em consequência da auditoria da spec 07: uma URL já presente no `Config` do Alembic prevalece sobre `settings.database_url_sync`. Sem ela, o RT-07-07 da spec 07 migraria o banco da aplicação em vez do de teste, em silêncio. O caminho de linha de comando não muda — `alembic.ini` traz `sqlalchemy.url` vazia —, então CA-02-08, CA-02-09 e CA-02-13 seguem válidos sem reexecução de contrato. Status permanece `Implementada`, com a divergência registrada na §8. |
+| 2026-08-04 | 1.7 | Emenda solicitada pelo usuário em consequência da spec 07: §3.1 e §3.3 acolhem `POSTGRES_TEST_DB` e as URLs `database_url_test_*`, cujo contrato pertence à spec 07 §3.4. Status permanece `Implementada` — nenhum `CA-02-*` depende desses campos —, com a divergência registrada na §8. |
 | 2026-07-22 | 1.6 | CA-02-12 alterado a pedido do usuário: exclui `.venv/` da varredura, alinhado a CA-01-06 (spec 01 v2.7). Pendência 5 fechada. Com a §8 vazia e todos os `CA-02-*` aprovados, o Status passa a `Implementada`. |
 | 2026-07-22 | 1.5 | Pendência 4 fechada: virtualenv criado em `./.venv` com as dependências do projeto e CA-02-11 executado no host — `POSTGRES_HOST=localhost` produz a URL com `localhost`, sem alteração de arquivo. Nova pendência 5: o `.venv` no repositório quebra os critérios de `grep` da raiz. |
 | 2026-07-22 | 1.4 | CA-02-01 corrigido a pedido do usuário: passa a esperar `development`, a saída real de um `StrEnum` (§3.2 inalterada). Critério reexecutado e aprovado; pendência 3 fechada. |
