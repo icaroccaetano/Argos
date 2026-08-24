@@ -103,11 +103,19 @@ Módulo `api/models/evaluation.py`, classe `Evaluation`, tabela `evaluations`:
 
 ### 3.3 Enumerações
 
-Módulo `api/models/enums.py`. Ambas herdam de `(str, Enum)`; o banco armazena o
+Módulo `api/models/enums.py`. Ambas herdam de `StrEnum`; o banco armazena o
 **valor**, não o nome do membro.
 
+`StrEnum` (Python 3.11+) é escolhida sobre `(str, Enum)` porque as duas divergem
+em `str(member)`: `(str, Enum)` devolve `"CurriculumStatus.PENDING"`, `StrEnum`
+devolve `"pending"`. A primeira forma vaza o nome do membro em qualquer
+interpolação — `f"status={status}"` num log, por exemplo — contrariando a regra
+desta própria seção de que é o valor que trafega. `.value`, a serialização do
+Pydantic e o `values_callable` do `sa.Enum` (RT-03-04) são idênticos nas duas
+formas, de modo que o DDL e as linhas já gravadas não mudam.
+
 ```python
-class CurriculumStatus(str, Enum):
+class CurriculumStatus(StrEnum):
     PENDING = "pending"
     PARSING = "parsing"
     EMBEDDING = "embedding"
@@ -115,7 +123,7 @@ class CurriculumStatus(str, Enum):
     ERROR = "error"
 
 
-class EvaluationStatus(str, Enum):
+class EvaluationStatus(StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"
     DONE = "done"
@@ -256,13 +264,25 @@ revisão v2.0; o número não é reciclado (template §2.1).
 
 ## 8. Pendências
 
-Nenhuma. Todos os `CA-03-01` … `CA-03-12` foram executados e aprovados em
-2026-08-04, dentro do container `api`.
+Nenhuma.
+
+A pendência anterior — a metade de `ruff` de CA-03-12 — foi fechada pela criação
+do `ruff.toml` na raiz (spec 01 §8), que declara o conjunto de regras e o desacopla
+da versão instalada. CA-03-12 foi reexecutado por inteiro no container em
+2026-08-24: `pytest` em `14 passed` e `ruff check .` em `All checks passed!`.
+
+Os `CA-03-01` … `CA-03-11` foram executados e aprovados em 2026-08-04, dentro do
+container `api`. Os testes que verificam `CA-03-06` … `CA-03-11` mudaram de caminho para
+`tests/integration/test_models.py` com a implementação da spec 07 e foram reexecutados
+em 2026-08-24 — `6 passed` —, agora contra o banco de teste dedicado.
 
 ## 9. Histórico de Revisões
 
 | Data | Versão | Alteração |
 |---|---|---|
+| 2026-08-24 | 1.4 | Escrituração após a revisão 1.3 e a criação do `ruff.toml` na raiz (spec 01 §8). Pendência 1 fechada: CA-03-12 reexecutado por inteiro no container — `pytest` em `14 passed`, `ruff check .` em `All checks passed!`. As enumerações em `StrEnum` não alteraram o DDL nem os dados: `CA-03-06` … `CA-03-11` passam sem migration nova. §8 zerada. Nenhuma seção normativa alterada. |
+| 2026-08-24 | 1.3 | §3.3 revisada a pedido do usuário: as enumerações passam de `(str, Enum)` para `StrEnum`. Motivo: `(str, Enum)` devolve `"CurriculumStatus.PENDING"` em `str(member)`, vazando o nome do membro em interpolações e contrariando a regra da própria §3.3. `.value`, o `values_callable` de RT-03-04 e a serialização do Pydantic não mudam — DDL e dados gravados ficam intactos. Nenhum `RN-` ou `CA-` alterado. |
+| 2026-08-24 | 1.2 | Escrituração após a implementação da spec 07, sem alteração de seção normativa. Os testes de CA-03-06 … CA-03-11 mudaram de `tests/test_models.py` para `tests/integration/test_models.py` e passaram a rodar contra o banco dedicado; o `TEST_BUCKET_PREFIX` deixou de existir (spec 07 RN-07-06) e os construtores saíram de `tests/conftest.py` para `tests/factories.py`. Reexecutados e aprovados. Nova pendência 1: a metade de `ruff` de CA-03-12 falha por causa externa a esta spec. |
 | 2026-08-04 | 1.1 | Implementação. Criados `api/models/enums.py`, `mixins.py`, `curriculum.py`, `evaluation.py`, o `__init__.py` do pacote e a migration `0002_create_curricula_and_evaluations.py`; testes em `tests/test_models.py`, sobre uma fixture de sessão assíncrona nova em `tests/conftest.py`. Todos os `CA-03-*` executados e aprovados; §8 zerada e Status para `Implementada`. Dois fatos descobertos na execução: (a) o id da revisão é `0002_curricula_evaluations`, mais curto que o nome do arquivo, porque `alembic_version.version_num` é `VARCHAR(32)` e o nome completo tem 38 caracteres; (b) CA-03-06 foi verificado pelo ramo `InvalidTextRepresentation` do critério — SQLSTATE `22P02` — porque o asyncpg não traduz esse erro para `DataError`. |
 | 2026-07-22 | 1.0 | Criação. Escopo restrito a `curricula` e `evaluations` por decisão do usuário; embeddings adiados para a v2.0. Decisões firmadas: ENUM nativo do PostgreSQL, `model_version` NOT NULL desde a criação, `deleted_at` nas duas tabelas e FK `ON DELETE RESTRICT`. |
   

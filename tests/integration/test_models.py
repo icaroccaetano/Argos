@@ -9,7 +9,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models import CurriculumStatus, Evaluation, EvaluationStatus
-from tests.conftest import TEST_BUCKET_PREFIX, make_curriculum, make_evaluation
+from tests.factories import make_curriculum, make_evaluation
 
 
 @pytest.mark.asyncio
@@ -31,7 +31,7 @@ async def test_ca_03_06_invalid_curriculum_status_is_rejected(
             ),
             {
                 "filename": "cv.pdf",
-                "bucket_key": f"{TEST_BUCKET_PREFIX}invalid-status.pdf",
+                "bucket_key": "invalid-status.pdf",
             },
         )
 
